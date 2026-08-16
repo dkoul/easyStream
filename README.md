@@ -19,7 +19,7 @@ MVP stores **event metadata only** (title, person, date, location, photo, live s
 
 Live ingest is **not** built from scratch. The API has a `StreamProvider` seam:
 
-- **Demo mode (default):** the viewer plays a public HLS fixture so the product can be walked through without Mux credentials.
+- **Demo mode (default):** no sample clip is played. The event page shows a waiting state until a real live playback URL exists.
 - **Mux:** set `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` for real live ingest. Mux is configured without creating a VOD asset.
 
 ## Event lifecycle

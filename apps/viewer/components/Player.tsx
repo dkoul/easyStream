@@ -15,7 +15,12 @@ export function Player({
 
   useEffect(() => {
     const video = ref.current;
-    if (!video || !src) return;
+    if (!video) return;
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    if (!src || !live) return;
+    if (/test-streams\.mux\.dev|gtv-videos-bucket/i.test(src)) return;
 
     if (src.endsWith(".m3u8") || src.includes(".m3u8?")) {
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -42,7 +47,7 @@ export function Player({
   return (
     <div className="video-shell" ref={shell}>
       {live ? <span className="live-pill">LIVE</span> : null}
-      <video ref={ref} controls playsInline autoPlay={live} />
+      <video ref={ref} controls playsInline autoPlay={Boolean(live && src)} />
       <button className="fs-btn" type="button" onClick={fullscreen}>
         Full screen
       </button>

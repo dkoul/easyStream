@@ -58,3 +58,11 @@ export function mediaUrl(pathOrUrl: string | null | undefined) {
   if (pathOrUrl.startsWith("http") || pathOrUrl.startsWith("data:")) return pathOrUrl;
   return `${apiBase()}${pathOrUrl}`;
 }
+
+export function liveVideoSrc(status: EventStatus, playbackUrl: string | null | undefined) {
+  if (status !== "live" || !playbackUrl) return null;
+  if (/test-streams\.mux\.dev|gtv-videos-bucket|commondatastorage\.googleapis\.com/i.test(playbackUrl)) {
+    return null;
+  }
+  return playbackUrl;
+}

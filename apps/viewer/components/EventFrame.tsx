@@ -2,6 +2,7 @@ import { Player } from "./Player";
 import {
   TYPE_DEDICATION,
   TYPE_LABELS,
+  liveVideoSrc,
   mediaUrl,
   type PublicEvent,
 } from "../lib/types";
@@ -14,7 +15,7 @@ export function EventFrame({
   compact?: boolean;
 }) {
   const photo = mediaUrl(event.photoUrl);
-  const liveSrc = event.status === "live" ? event.playbackUrl : null;
+  const liveSrc = liveVideoSrc(event.status, event.playbackUrl);
   const desktop = !compact;
 
   return (
@@ -25,10 +26,13 @@ export function EventFrame({
             <Player src={liveSrc} live />
           ) : (
             <div className="video-shell">
+              {event.status === "live" ? <span className="live-pill">LIVE</span> : null}
               <div className="placeholder">
                 {event.status === "completed"
                   ? "This livestream has ended."
-                  : "The event will begin shortly."}
+                  : event.status === "live"
+                    ? "Waiting for the family camera."
+                    : "The event will begin shortly."}
               </div>
             </div>
           )}
