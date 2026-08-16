@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+out/
+*.log
+.env
+.env.local
+apps/api/data/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+*.iml
+.idea/
+.DS_Store
+coverage/
+*.tsbuildinfo

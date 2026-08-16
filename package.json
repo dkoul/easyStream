@@ -1,0 +1,21 @@
+{
+  "name": "easystream",
+  "private": true,
+  "version": "1.0.0",
+  "description": "One-button family livestreaming for Indian families",
+  "workspaces": [
+    "apps/api",
+    "apps/viewer"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev -w @easystream/api",
+    "dev:viewer": "npm run dev -w @easystream/viewer",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test -w @easystream/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
