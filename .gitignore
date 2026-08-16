@@ -5,7 +5,6 @@ out/
 *.log
 .env
 .env.local
-data/
 apps/api/data/
 apps/android/.gradle/
 apps/android/build/
