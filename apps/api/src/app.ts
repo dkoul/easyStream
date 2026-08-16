@@ -6,7 +6,7 @@ import { z } from "zod";
 import { MemoryStore } from "./memory-store.js";
 import { makeEventSlug } from "./slug.js";
 import { toBroadcasterEvent, toPublicEvent, type EventStore } from "./store.js";
-import { createStreamProvider, type StreamProvider } from "./stream.js";
+import { createStreamProvider, realPlaybackUrl, type StreamProvider } from "./stream.js";
 import type { EventRecord } from "./types.js";
 import { EVENT_TYPES, TEMPLATES } from "./types.js";
 
@@ -170,7 +170,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       streamId: session.streamId,
       ingestUrl: session.ingestUrl,
       streamKey: session.streamKey,
-      playbackUrl: session.playbackUrl,
+      playbackUrl: realPlaybackUrl(session.playbackUrl),
       startedAt: new Date().toISOString(),
       viewerCount: 0,
     }))!;

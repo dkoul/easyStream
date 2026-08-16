@@ -4,28 +4,39 @@ export type StreamSession = {
   streamId: string;
   ingestUrl: string | null;
   streamKey: string | null;
-  playbackUrl: string;
+  playbackUrl: string | null;
 };
 
 /**
- * Managed live ingest/playback only. MVP does not persist recordings.
+ * Managed live ingest/playback only. MVP does not persist recordings
+ * and never substitutes a sample clip for the family camera.
  */
 export interface StreamProvider {
   startLive(): Promise<StreamSession>;
   endLive(session: StreamSession): Promise<void>;
 }
 
-const DEMO_LIVE =
-  process.env.DEMO_LIVE_HLS ??
-  "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+const PLACEHOLDER_PLAYBACK_HOSTS = [
+  "test-streams.mux.dev",
+  "gtv-videos-bucket",
+  "commondatastorage.googleapis.com",
+];
 
-export class DemoStreamProvider implements StreamProvider {
+/** Drop leftover demo/sample clips so the viewer never plays a random video. */
+export function realPlaybackUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const lower = url.toLowerCase();
+  if (PLACEHOLDER_PLAYBACK_HOSTS.some((host) => lower.includes(host))) return null;
+  return url;
+}
+
+export class LocalStreamProvider implements StreamProvider {
   async startLive(): Promise<StreamSession> {
     return {
-      streamId: `demo_${nanoid(10)}`,
+      streamId: `local_${nanoid(10)}`,
       ingestUrl: null,
       streamKey: null,
-      playbackUrl: DEMO_LIVE,
+      playbackUrl: null,
     };
   }
 
@@ -84,5 +95,5 @@ export function createStreamProvider(): StreamProvider {
   const id = process.env.MUX_TOKEN_ID;
   const secret = process.env.MUX_TOKEN_SECRET;
   if (id && secret) return new MuxStreamProvider(id, secret);
-  return new DemoStreamProvider();
+  return new LocalStreamProvider();
 }

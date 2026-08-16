@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp, shareText } from "../app.js";
 import { makeEventSlug, slugifyBase } from "../slug.js";
-import type { StreamProvider } from "../stream.js";
+import { LocalStreamProvider, realPlaybackUrl, type StreamProvider } from "../stream.js";
 
 const app = await buildApp({
   jwtSecret: "test-secret",
@@ -48,6 +48,73 @@ describe("slug", () => {
     const slug = makeEventSlug("Rajesh Koul", "Prayer Meet");
     expect(slug.startsWith("rajesh-koul-prayer-meet-")).toBe(true);
     expect(slug.split("-").at(-1)?.length).toBe(6);
+  });
+});
+
+describe("playback URLs", () => {
+  it("never treats sample clips as live video", () => {
+    expect(realPlaybackUrl("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8")).toBeNull();
+    expect(realPlaybackUrl("https://cdn.example/live.m3u8")).toBe("https://cdn.example/live.m3u8");
+  });
+
+  it("does not attach a sample clip when going live without a provider", async () => {
+    const session = await new LocalStreamProvider().startLive();
+    expect(session.playbackUrl).toBeNull();
+  });
+
+  it("hides leftover sample clips from the public event page", async () => {
+    const fixtureApp = await buildApp({
+      jwtSecret: "test-secret",
+      publicBaseUrl: "https://easystream.in",
+      logger: false,
+      streamProvider: {
+        async startLive() {
+          return {
+            streamId: "s2",
+            ingestUrl: null,
+            streamKey: null,
+            playbackUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+          };
+        },
+        async endLive() {},
+      },
+    });
+    await fixtureApp.inject({
+      method: "POST",
+      url: "/auth/otp/request",
+      payload: { phone: "8888888888" },
+    });
+    const auth = await fixtureApp.inject({
+      method: "POST",
+      url: "/auth/otp/verify",
+      payload: { phone: "8888888888", code: "123456" },
+    });
+    const token = auth.json().token as string;
+    const created = await fixtureApp.inject({
+      method: "POST",
+      url: "/events",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        type: "prayer_meet",
+        title: "Prayer Meet",
+        personName: "Rajesh Koul",
+        date: "16 August 2026",
+        location: "Pune",
+        template: "classic",
+      },
+    });
+    await fixtureApp.inject({
+      method: "POST",
+      url: `/events/${created.json().event.id}/go-live`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const page = await fixtureApp.inject({
+      method: "GET",
+      url: `/e/${created.json().event.slug}`,
+    });
+    expect(page.json().event.status).toBe("live");
+    expect(page.json().event.playbackUrl).toBeNull();
+    await fixtureApp.close();
   });
 });
 

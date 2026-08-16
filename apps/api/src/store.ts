@@ -1,3 +1,4 @@
+import { realPlaybackUrl } from "./stream.js";
 import type { EventRecord, EventStatus, EventType, TemplateId, User } from "./types.js";
 
 export type EventStore = {
@@ -18,7 +19,10 @@ export type EventStore = {
 
 export function toPublicEvent(event: EventRecord) {
   const { ownerId: _o, ingestUrl: _i, streamKey: _s, ...rest } = event;
-  return rest;
+  return {
+    ...rest,
+    playbackUrl: event.status === "live" ? realPlaybackUrl(event.playbackUrl) : null,
+  };
 }
 
 export function toBroadcasterEvent(event: EventRecord) {
