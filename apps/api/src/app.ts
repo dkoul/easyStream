@@ -1,22 +1,14 @@
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
-import multipart from "@fastify/multipart";
-import staticFiles from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
-import fs from "node:fs";
-import path from "node:path";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { openDatabase } from "./db.js";
+import { MemoryStore } from "./memory-store.js";
 import { makeEventSlug } from "./slug.js";
-import { Store, toBroadcasterEvent, toPublicEvent } from "./store.js";
+import { toBroadcasterEvent, toPublicEvent, type EventStore } from "./store.js";
 import { createStreamProvider, type StreamProvider } from "./stream.js";
-import {
-  EVENT_TYPES,
-  TEMPLATES,
-  type EventRecord,
-  type EventStatus,
-} from "./types.js";
+import type { EventRecord } from "./types.js";
+import { EVENT_TYPES, TEMPLATES } from "./types.js";
 
 const createEventSchema = z.object({
   type: z.enum(EVENT_TYPES),
@@ -30,13 +22,11 @@ const createEventSchema = z.object({
 });
 
 export type AppOptions = {
-  dbPath: string;
   jwtSecret: string;
   publicBaseUrl: string;
-  uploadDir: string;
+  store?: EventStore;
   streamProvider?: StreamProvider;
   otpTtlMs?: number;
-  processingDelayMs?: number;
   logger?: boolean;
 };
 
@@ -48,34 +38,13 @@ function normalizePhone(raw: string): string {
   return raw.trim();
 }
 
-function savePhoto(uploadDir: string, dataUrl: string): string {
-  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
-  if (!match) throw new Error("Photo must be a data URL");
-  const ext = match[1].includes("png") ? "png" : match[1].includes("webp") ? "webp" : "jpg";
-  const filename = `${nanoid()}.${ext}`;
-  fs.mkdirSync(uploadDir, { recursive: true });
-  fs.writeFileSync(path.join(uploadDir, filename), Buffer.from(match[2], "base64"));
-  return `/uploads/${filename}`;
-}
-
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false });
-  const db = openDatabase(opts.dbPath);
-  const store = new Store(db);
+  const store = opts.store ?? new MemoryStore();
   const streams = opts.streamProvider ?? createStreamProvider();
-  const processingDelayMs = opts.processingDelayMs ?? 1500;
 
   await app.register(cors, { origin: true });
   await app.register(jwt, { secret: opts.jwtSecret });
-  await app.register(multipart, { limits: { fileSize: 8_000_000 } });
-  fs.mkdirSync(opts.uploadDir, { recursive: true });
-  await app.register(staticFiles, {
-    root: opts.uploadDir,
-    prefix: "/uploads/",
-    decorateReply: false,
-  });
-
-  app.decorate("store", store);
 
   app.setErrorHandler((err, _request, reply) => {
     if (err instanceof z.ZodError) {
@@ -95,25 +64,24 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     try {
       await request.jwtVerify();
     } catch {
-        throw httpError(401, "Please sign in again");
+      throw httpError(401, "Please sign in again");
     }
     const payload = request.user as { sub: string };
-    const user = store.getUser(payload.sub);
+    const user = await store.getUser(payload.sub);
     if (!user) throw httpError(401, "Please sign in again");
     return user;
   }
 
-  app.get("/health", async () => ({ ok: true }));
+  app.get("/health", async () => ({ ok: true, store: store.constructor.name }));
 
   app.post("/auth/otp/request", async (request) => {
     const body = z.object({ phone: z.string().min(10) }).parse(request.body);
     const phone = normalizePhone(body.phone);
     const code = process.env.FIXED_OTP ?? "123456";
-    store.saveOtp(phone, code, opts.otpTtlMs ?? 10 * 60 * 1000);
+    await store.saveOtp(phone, code, opts.otpTtlMs ?? 10 * 60 * 1000);
     return {
       ok: true,
       message: "We sent a 6-digit code to your phone.",
-      // Dev-only hint so the Android/web studio can proceed without SMS.
       demoCode: process.env.NODE_ENV === "production" ? undefined : code,
     };
   });
@@ -123,10 +91,10 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       .object({ phone: z.string().min(10), code: z.string().min(4), name: z.string().optional() })
       .parse(request.body);
     const phone = normalizePhone(body.phone);
-    if (!store.consumeOtp(phone, body.code)) {
+    if (!(await store.consumeOtp(phone, body.code))) {
       throw httpError(401, "That code did not work. Please try again.");
     }
-    const user = store.upsertUserByPhone(phone, body.name ?? null);
+    const user = await store.upsertUserByPhone(phone, body.name ?? null);
     const token = await app.jwt.sign({ sub: user.id, phone: user.phone }, { expiresIn: "30d" });
     return { token, user };
   });
@@ -138,7 +106,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
 
   app.get("/events", async (request) => {
     const user = await requireUser(request);
-    return { events: store.listEventsForOwner(user.id).map(toBroadcasterEvent) };
+    const events = await store.listEventsForOwner(user.id);
+    return { events: events.map(toBroadcasterEvent) };
   });
 
   app.post("/events", async (request) => {
@@ -146,9 +115,11 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     const body = createEventSchema.parse(request.body);
     let photoUrl: string | null = null;
     if (body.photoDataUrl) {
-      photoUrl = savePhoto(opts.uploadDir, body.photoDataUrl);
+      photoUrl = store.savePhotoDataUrl
+        ? await store.savePhotoDataUrl(body.photoDataUrl)
+        : body.photoDataUrl;
     }
-    const event = store.createEvent({
+    const event = await store.createEvent({
       id: nanoid(),
       ownerId: user.id,
       slug: makeEventSlug(body.personName, body.title),
@@ -165,7 +136,6 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       ingestUrl: null,
       streamKey: null,
       playbackUrl: null,
-      recordingUrl: null,
       startedAt: null,
       endedAt: null,
     });
@@ -175,29 +145,15 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   app.get("/events/:id", async (request) => {
     const user = await requireUser(request);
     const { id } = request.params as { id: string };
-    const event = store.getEventById(id);
+    const event = await store.getEventById(id);
     if (!event || event.ownerId !== user.id) throw httpError(404, "Event not found");
     return { event: toBroadcasterEvent(event), shareUrl: shareUrl(opts.publicBaseUrl, event.slug) };
-  });
-
-  app.post("/events/:id/photo", async (request) => {
-    const user = await requireUser(request);
-    const { id } = request.params as { id: string };
-    const event = owned(store, user.id, id);
-    const file = await request.file();
-    if (!file) throw httpError(400, "Please add a photograph");
-    const buf = await file.toBuffer();
-    const ext = file.mimetype.includes("png") ? "png" : "jpg";
-    const filename = `${nanoid()}.${ext}`;
-    fs.writeFileSync(path.join(opts.uploadDir, filename), buf);
-    const updated = store.updateEvent(event.id, { photoUrl: `/uploads/${filename}` })!;
-    return { event: toBroadcasterEvent(updated) };
   });
 
   app.post("/events/:id/go-live", async (request) => {
     const user = await requireUser(request);
     const { id } = request.params as { id: string };
-    const event = owned(store, user.id, id);
+    const event = await owned(store, user.id, id);
     if (event.status === "live") {
       return {
         event: toBroadcasterEvent(event),
@@ -209,16 +165,15 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       throw httpError(400, "This event can no longer go live.");
     }
     const session = await streams.startLive();
-    const updated = store.updateEvent(event.id, {
+    const updated = (await store.updateEvent(event.id, {
       status: "live",
       streamId: session.streamId,
       ingestUrl: session.ingestUrl,
       streamKey: session.streamKey,
       playbackUrl: session.playbackUrl,
-      recordingUrl: session.recordingUrl,
       startedAt: new Date().toISOString(),
       viewerCount: 0,
-    })!;
+    }))!;
     return {
       event: toBroadcasterEvent(updated),
       shareUrl: shareUrl(opts.publicBaseUrl, updated.slug),
@@ -229,61 +184,46 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   app.post("/events/:id/end", async (request) => {
     const user = await requireUser(request);
     const { id } = request.params as { id: string };
-    const event = owned(store, user.id, id);
+    const event = await owned(store, user.id, id);
     if (event.status !== "live") {
       throw httpError(400, "This livestream is not running.");
     }
-    store.updateEvent(event.id, {
-      status: "processing",
-      endedAt: new Date().toISOString(),
-    });
-    const session = {
+    await streams.endLive({
       streamId: event.streamId ?? "",
       ingestUrl: event.ingestUrl,
       streamKey: event.streamKey,
       playbackUrl: event.playbackUrl ?? "",
-      recordingUrl: event.recordingUrl ?? "",
-    };
-    const { recordingUrl } = await streams.endLive(session);
-    const finish = () =>
-      store.updateEvent(event.id, {
-        status: "completed" satisfies EventStatus,
-        recordingUrl,
-        playbackUrl: recordingUrl,
-      });
-    if (processingDelayMs <= 0) {
-      finish();
-    } else {
-      setTimeout(finish, processingDelayMs);
-    }
-    const processing = store.getEventById(event.id)!;
-    return { event: toBroadcasterEvent(processing) };
+    });
+    const completed = (await store.updateEvent(event.id, {
+      status: "completed",
+      endedAt: new Date().toISOString(),
+      playbackUrl: null,
+      ingestUrl: null,
+      streamKey: null,
+    }))!;
+    return { event: toBroadcasterEvent(completed) };
   });
 
   app.get("/e/:slug", async (request) => {
     const { slug } = request.params as { slug: string };
-    const event = store.getEventBySlug(slug);
+    const event = await store.getEventBySlug(slug);
     if (!event) throw httpError(404, "This event link is not valid.");
     return { event: toPublicEvent(event) };
   });
 
   app.post("/e/:slug/presence", async (request) => {
     const { slug } = request.params as { slug: string };
-    const event = store.getEventBySlug(slug);
+    const event = await store.getEventBySlug(slug);
     if (!event) throw httpError(404, "This event link is not valid.");
-    const viewerCount = store.bumpViewers(event.id);
+    const viewerCount = await store.bumpViewers(event.id);
     return { viewerCount };
-  });
-
-  app.addHook("onClose", async () => {
-    db.close();
   });
 
   return app;
 }
 
-function owned(store: Store, userId: string, eventId: string): EventRecord {
-  const event = store.getEventById(eventId);
+async function owned(store: EventStore, userId: string, eventId: string): Promise<EventRecord> {
+  const event = await store.getEventById(eventId);
   if (!event || event.ownerId !== userId) throw httpError(404, "Event not found");
   return event;
 }

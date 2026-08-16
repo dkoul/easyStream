@@ -30,7 +30,6 @@ data class EventRecord(
     val ingestUrl: String?,
     val streamKey: String?,
     val playbackUrl: String?,
-    val recordingUrl: String?,
     val viewerCount: Int = 0,
 )
 

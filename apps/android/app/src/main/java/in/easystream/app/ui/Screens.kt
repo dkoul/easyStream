@@ -141,7 +141,7 @@ fun EasyStreamRoot(vm: EasyStreamViewModel = viewModel()) {
         Screen.ConfirmEnd -> ScreenScaffold {
             Title("End livestream?")
             Spacer(Modifier.height(12.dp))
-            Note("Relatives will no longer see the live video. A recording will be prepared on the same link.")
+            Note("Relatives will no longer see the live video.")
             Spacer(Modifier.height(20.dp))
             PrimaryButton("End Live", enabled = !state.busy) { vm.endLive() }
             Spacer(Modifier.height(10.dp))
@@ -151,10 +151,10 @@ fun EasyStreamRoot(vm: EasyStreamViewModel = viewModel()) {
         Screen.Ended -> ScreenScaffold {
             Title("Your livestream has ended.")
             Spacer(Modifier.height(12.dp))
-            Note("The recording will appear on the same family link in a moment.")
+            Note("Thank you. This livestream is no longer running.")
             Spacer(Modifier.height(20.dp))
-            PrimaryButton("Share Recording") {
-                context.startActivity(Intent.createChooser(vm.shareIntent(context), "Share recording"))
+            PrimaryButton("Share with family") {
+                context.startActivity(Intent.createChooser(vm.shareIntent(context), "Share with family"))
             }
             Spacer(Modifier.height(10.dp))
             SecondaryButton("Done") { vm.done() }

@@ -9,7 +9,7 @@ export const EVENT_TYPES = [
 
 export type EventType = (typeof EVENT_TYPES)[number];
 export type TemplateId = "classic" | "elegant" | "traditional";
-export type EventStatus = "draft" | "upcoming" | "live" | "processing" | "completed";
+export type EventStatus = "draft" | "upcoming" | "live" | "completed";
 
 export type PublicEvent = {
   id: string;
@@ -25,7 +25,6 @@ export type PublicEvent = {
   status: EventStatus;
   streamId: string | null;
   playbackUrl: string | null;
-  recordingUrl: string | null;
   viewerCount: number;
   startedAt: string | null;
   endedAt: string | null;

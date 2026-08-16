@@ -4,28 +4,41 @@
 
 easyStream is a Phase 1 MVP for Indian families who want to share a prayer meet, wedding, or family function with relatives who cannot attend in person.
 
-The broadcaster creates an event on a phone, presses **Start Live**, and shares a WhatsApp link. Relatives open the link in a browser — no app, no login — and watch inside a personalized event frame. When the stream ends, the same URL becomes the recording.
+The broadcaster creates an event on a phone, presses **Start Live**, and shares a WhatsApp link. Relatives open the link in a browser — no app, no login — and watch inside a personalized event frame.
+
+MVP stores **event metadata only** (title, person, date, location, photo, live status). It does **not** store stream recordings.
 
 ## What this repository contains
 
 | Path | Role |
 | --- | --- |
-| `apps/api` | Node.js / TypeScript backend: phone OTP, events, unlisted URLs, live lifecycle, recordings |
+| `apps/api` | Node.js / TypeScript backend: phone OTP, unlisted event URLs, live lifecycle |
 | `apps/viewer` | Next.js viewer + a web **Studio** that mirrors the Android journey for demos |
 | `apps/android` | Kotlin / Jetpack Compose broadcaster app (camera, start/stop, WhatsApp share) |
+| `supabase/migrations` | Metadata schema for [project txwjbficiwbenbifzpok](https://supabase.com/dashboard/project/txwjbficiwbenbifzpok) |
 
-Streaming ingest is **not** built from scratch. The API has a `StreamProvider` seam:
+Live ingest is **not** built from scratch. The API has a `StreamProvider` seam:
 
 - **Demo mode (default):** the viewer plays a public HLS fixture so the product can be walked through without Mux credentials.
-- **Mux:** set `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` to create real live streams (RTMP ingest + HLS playback + recording).
+- **Mux:** set `MUX_TOKEN_ID` and `MUX_TOKEN_SECRET` for real live ingest. Mux is configured without creating a VOD asset.
 
 ## Event lifecycle
 
-`Draft → Upcoming → Live → Processing → Completed`
+`Draft → Upcoming → Live → Completed`
+
+When the stream ends, the event page stays as a digital invitation (photo, names, date). There is no recording playback.
 
 Events are **unlisted**. There is no public directory. The shareable URL is human-readable plus a short random suffix, for example:
 
 `http://localhost:3000/e/rajesh-koul-prayer-meet-a7k2x9`
+
+## Supabase
+
+Metadata lives in Postgres. Event portraits go in the `event-photos` bucket. RLS is enabled; viewers never query Supabase directly.
+
+1. Run `supabase/migrations/20260816120000_event_metadata.sql` in the [SQL editor](https://supabase.com/dashboard/project/txwjbficiwbenbifzpok/sql).
+2. Set `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_URL`, defaulting to `https://txwjbficiwbenbifzpok.supabase.co`) on the API.
+3. Without the service role key, the API falls back to in-memory metadata for local tests only.
 
 ## Run locally
 
@@ -40,7 +53,7 @@ npm run dev:viewer   # http://localhost:3000
 Open [http://localhost:3000/studio](http://localhost:3000/studio).
 
 - Phone OTP in development is **123456**.
-- Create a Prayer Meet, choose a design, preview, start live, share the link, then stop. The same URL shows the recording after a short processing pause.
+- Create a Prayer Meet, choose a design, preview, start live, share the link, then stop.
 
 ```bash
 npm test
@@ -55,32 +68,7 @@ Open `apps/android` in Android Studio.
 - Point a physical device at your machine's LAN IP.
 - Screens follow the PRD: Welcome → OTP → event type → details + photo → design → preview → ready → live → end.
 - Share uses the Android share sheet and prefers WhatsApp when installed.
-- CameraX preview supports front/rear switching. Network, battery, and microphone presence are shown in plain language.
-- Real camera ingest to Mux is the next wiring step once `MUX_*` credentials exist; until then, Start Live still creates a live event page relatives can open.
-
-## MVP acceptance (this slice)
-
-**Broadcaster**
-
-- Create an event in a short guided flow
-- Add a photograph and choose Classic / Elegant / Traditional
-- Preview what relatives will see
-- Start and stop with one primary action
-- See live duration, network, audio, and battery
-- Get a shareable URL and share via WhatsApp / the system share sheet
-- Recording is generated automatically (demo fixture, or Mux asset when configured)
-
-**Viewer**
-
-- Open the URL with no app and no account
-- Personalized frame on mobile and desktop
-- Live and recording playback, including full screen
-- Unlisted: only people with the link can watch
 
 ## Privacy
 
 Family events are unlisted by default. The broadcaster sees: *Anyone with this link can watch.* Password / OTP for viewers is intentionally out of MVP scope.
-
-## Product hypothesis
-
-If an older family member can start a livestream with almost no technical knowledge, and relatives can join from a WhatsApp link, families will use this when physical attendance is impossible.

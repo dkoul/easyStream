@@ -1,18 +1,11 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp, shareText } from "../app.js";
 import { makeEventSlug, slugifyBase } from "../slug.js";
 import type { StreamProvider } from "../stream.js";
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "easystream-"));
 const app = await buildApp({
-  dbPath: path.join(tmp, "test.sqlite"),
   jwtSecret: "test-secret",
   publicBaseUrl: "https://easystream.in",
-  uploadDir: path.join(tmp, "uploads"),
-  processingDelayMs: 0,
   logger: false,
   streamProvider: {
     async startLive() {
@@ -21,18 +14,14 @@ const app = await buildApp({
         ingestUrl: "rtmps://example/app",
         streamKey: "key",
         playbackUrl: "https://cdn.example/live.m3u8",
-        recordingUrl: "https://cdn.example/rec.mp4",
       };
     },
-    async endLive() {
-      return { recordingUrl: "https://cdn.example/rec.mp4" };
-    },
+    async endLive() {},
   } satisfies StreamProvider,
 });
 
 afterAll(async () => {
   await app.close();
-  fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 async function authToken() {
@@ -77,7 +66,7 @@ describe("auth and event lifecycle", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("creates an unlisted event and walks upcoming → live → processing → completed", async () => {
+  it("creates an unlisted event and walks upcoming → live → completed without a recording", async () => {
     const token = await authToken();
     const created = await app.inject({
       method: "POST",
@@ -97,12 +86,14 @@ describe("auth and event lifecycle", () => {
     const body = created.json();
     expect(body.event.status).toBe("upcoming");
     expect(body.event.slug).toMatch(/rajesh-koul-prayer-meet-/);
+    expect(body.event.recordingUrl).toBeUndefined();
     expect(body.shareUrl).toContain(body.event.slug);
 
     const publicBefore = await app.inject({ method: "GET", url: `/e/${body.event.slug}` });
     expect(publicBefore.statusCode).toBe(200);
     expect(publicBefore.json().event.streamKey).toBeUndefined();
     expect(publicBefore.json().event.ingestUrl).toBeUndefined();
+    expect(publicBefore.json().event.recordingUrl).toBeUndefined();
 
     const live = await app.inject({
       method: "POST",
@@ -113,6 +104,7 @@ describe("auth and event lifecycle", () => {
     expect(live.json().event.status).toBe("live");
     expect(live.json().shareText).toContain("Rajesh Koul's Prayer Meet is LIVE");
     expect(live.json().event.streamKey).toBe("key");
+    expect(live.json().event.playbackUrl).toBe("https://cdn.example/live.m3u8");
 
     const presence = await app.inject({
       method: "POST",
@@ -126,11 +118,14 @@ describe("auth and event lifecycle", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(ended.statusCode).toBe(200);
-    expect(["processing", "completed"]).toContain(ended.json().event.status);
+    expect(ended.json().event.status).toBe("completed");
+    expect(ended.json().event.playbackUrl).toBeNull();
+    expect(ended.json().event.recordingUrl).toBeUndefined();
 
     const after = await app.inject({ method: "GET", url: `/e/${body.event.slug}` });
     expect(after.json().event.status).toBe("completed");
-    expect(after.json().event.recordingUrl).toBe("https://cdn.example/rec.mp4");
+    expect(after.json().event.playbackUrl).toBeNull();
+    expect(after.json().event.recordingUrl).toBeUndefined();
   });
 
   it("does not list events on a public index", async () => {
@@ -157,7 +152,6 @@ describe("auth and event lifecycle", () => {
         ingestUrl: null,
         streamKey: null,
         playbackUrl: null,
-        recordingUrl: null,
         viewerCount: 0,
         startedAt: null,
         endedAt: null,

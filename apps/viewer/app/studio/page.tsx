@@ -81,7 +81,6 @@ export default function StudioPage() {
       status: "upcoming",
       streamId: null,
       playbackUrl: null,
-      recordingUrl: null,
       viewerCount: 0,
       startedAt: null,
       endedAt: null,
@@ -387,7 +386,7 @@ export default function StudioPage() {
         {step === "confirm-end" && (
           <>
             <h2>End livestream?</h2>
-            <p className="note">Relatives will no longer see the live video. A recording will be prepared on the same link.</p>
+            <p className="note">Relatives will no longer see the live video.</p>
             <button className="big-action" type="button" onClick={() => void endLive()}>
               End Live
             </button>
@@ -400,10 +399,10 @@ export default function StudioPage() {
         {step === "ended" && (
           <>
             <h2>Your livestream has ended.</h2>
-            <p className="note">The recording will appear on the same family link in a moment.</p>
+            <p className="note">Thank you. This livestream is no longer running.</p>
             {event ? (
               <a className="big-action" href={`/e/${event.slug}`} style={{ textDecoration: "none" }}>
-                Share Recording
+                Open event page
               </a>
             ) : null}
             <button className="big-action secondary" type="button" onClick={() => (window.location.href = "/")}>

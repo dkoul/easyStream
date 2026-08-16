@@ -14,29 +14,22 @@ export function EventFrame({
   compact?: boolean;
 }) {
   const photo = mediaUrl(event.photoUrl);
-  const liveSrc =
-    event.status === "live" ? event.playbackUrl : event.status === "completed" ? event.recordingUrl ?? event.playbackUrl : null;
+  const liveSrc = event.status === "live" ? event.playbackUrl : null;
   const desktop = !compact;
 
   return (
     <article className={`frame ${event.template}`}>
       <div className={desktop ? "frame-desktop" : undefined}>
         <div>
-          {event.status === "live" || event.status === "completed" ? (
-            liveSrc ? (
-              <Player src={liveSrc} live={event.status === "live"} />
-            ) : (
-              <div className="video-shell">
-                <div className="placeholder">The recording is being prepared.</div>
-              </div>
-            )
+          {event.status === "live" && liveSrc ? (
+            <Player src={liveSrc} live />
           ) : (
             <div className="video-shell">
-              {event.status === "processing" ? (
-                <div className="placeholder">The recording is being prepared. Please wait a moment.</div>
-              ) : (
-                <div className="placeholder">The event will begin shortly.</div>
-              )}
+              <div className="placeholder">
+                {event.status === "completed"
+                  ? "This livestream has ended."
+                  : "The event will begin shortly."}
+              </div>
             </div>
           )}
         </div>
@@ -79,11 +72,8 @@ function StatusCopy({ event }: { event: PublicEvent }) {
   if (event.status === "upcoming") {
     return <p className="status-copy">The event will begin shortly.</p>;
   }
-  if (event.status === "processing") {
-    return <p className="status-copy">Your livestream has ended. The recording is being prepared.</p>;
-  }
   if (event.status === "completed") {
-    return <p className="status-copy">Watch the recording whenever you are ready.</p>;
+    return <p className="status-copy">This livestream has ended.</p>;
   }
   return null;
 }

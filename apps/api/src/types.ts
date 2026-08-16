@@ -12,13 +12,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export const TEMPLATES = ["classic", "elegant", "traditional"] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
-export const EVENT_STATUSES = [
-  "draft",
-  "upcoming",
-  "live",
-  "processing",
-  "completed",
-] as const;
+export const EVENT_STATUSES = ["draft", "upcoming", "live", "completed"] as const;
 
 export type EventStatus = (typeof EVENT_STATUSES)[number];
 
@@ -29,6 +23,7 @@ export type User = {
   createdAt: string;
 };
 
+/** Event metadata only. Live playback URLs are ephemeral; recordings are not stored. */
 export type EventRecord = {
   id: string;
   ownerId: string;
@@ -46,14 +41,10 @@ export type EventRecord = {
   ingestUrl: string | null;
   streamKey: string | null;
   playbackUrl: string | null;
-  recordingUrl: string | null;
   viewerCount: number;
   startedAt: string | null;
   endedAt: string | null;
   createdAt: string;
 };
 
-export type PublicEvent = Omit<
-  EventRecord,
-  "ownerId" | "ingestUrl" | "streamKey"
->;
+export type PublicEvent = Omit<EventRecord, "ownerId" | "ingestUrl" | "streamKey">;

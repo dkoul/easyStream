@@ -1,15 +1,26 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
+import { MemoryStore } from "./memory-store.js";
+import { createSupabaseAdmin, DEFAULT_SUPABASE_URL, SupabaseStore } from "./supabase-store.js";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = process.env.DATA_DIR ?? path.join(here, "..", "data");
+const supabaseUrl = process.env.SUPABASE_URL ?? DEFAULT_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const store = supabaseKey
+  ? new SupabaseStore(createSupabaseAdmin(supabaseUrl, supabaseKey))
+  : new MemoryStore();
+
+if (!supabaseKey) {
+  console.warn(
+    "SUPABASE_SERVICE_ROLE_KEY is not set. Event metadata is in memory only. Add the secret and restart.",
+  );
+} else {
+  console.info(`Storing event metadata in Supabase (${supabaseUrl})`);
+}
 
 const app = await buildApp({
-  dbPath: process.env.DB_PATH ?? path.join(dataDir, "easystream.sqlite"),
   jwtSecret: process.env.JWT_SECRET ?? "dev-easystream-secret-change-me",
   publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "http://localhost:3000",
-  uploadDir: process.env.UPLOAD_DIR ?? path.join(dataDir, "uploads"),
+  store,
   logger: true,
 });
 
